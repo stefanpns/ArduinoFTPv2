@@ -24,8 +24,7 @@ namespace ClientWriteConsole
             Thread t_write = new Thread(new ThreadStart(ThreadProcWrite));
             t_write.Start();
         }
-        // obratiti paznju na bafer baud 9600/8 = 1200 b/s 
-        // 
+	    
         public static void ThreadProcWrite() {
             
 
