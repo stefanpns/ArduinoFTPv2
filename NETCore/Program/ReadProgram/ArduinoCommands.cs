@@ -364,17 +364,15 @@ namespace coreapp
             int i = 0;
             
             CommandObject.WriteIndent();
-            for ( ; i < data.Count-1; i++ ) {
+            int rB = isWithCrc ? data.Count - 1 : data.Count;
+            for ( ; i < rB; i++ ) {
 
                 Console.Write((char)data[i]);
-                    
-                if ( ( (char)data[i] == '\n' ) ||  ( (char)data[i] == '\r') ) {
+                if ( ( (char)data[i]) == '\n'  ) {
                     CommandObject.WriteIndent();
                 }
             }
 
-            if ( !isWithCrc )
-                Console.Write((char)data[i]);
             
             Console.WriteLine();
            
