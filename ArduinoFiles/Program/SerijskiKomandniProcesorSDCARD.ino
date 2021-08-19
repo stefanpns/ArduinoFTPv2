@@ -32,7 +32,7 @@ void setup() {
   
   ReturnValues::printComment(F("@sd card demo projekat"));
   if (!sd.begin(chipSelect, SPI_HALF_SPEED)) {
-      ReturnValues::printErrorV2(F("unable to init communication with SdCard"), 10);
+      ReturnValues::printComment(F("unable to init communication with SdCard"), 10);
       return;
   }
 
