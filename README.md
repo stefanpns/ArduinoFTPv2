@@ -1,2 +1,2 @@
-# ArduinoFTPv2
-Uputstvo za korišćenje projekta pogledati u dokumentu docs/FtpSistem.pdf.
+# ArduinoUCFtpSystem
+Uputstvo za korišćenje projekta pogledati u dokumentu sa nazivom FtpSistem.pdf.
