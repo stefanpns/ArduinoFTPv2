@@ -1,0 +1,1227 @@
+% !TeX spellcheck = en_US
+\documentclass[a4paper]{extarticle}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+%\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage[hidelinks]{hyperref}
+\renewcommand{\refname}{Literatura}
+\renewcommand*\contentsname{Sadžaj}
+\usepackage{times} 
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{csquotes}
+\usepackage{mathtools}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage[normalem]{ulem}
+\useunder{\uline}{\ul}{}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\usepackage[normalem]{ulem}
+\useunder{\uline}{\ul}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{}
+\lhead{}
+\rfoot{}
+\title{Arduino uCFtp server i serijska komunikacija sa C$\#$ aplikacijom}
+\date{}
+
+\begin{document}
+	
+	\maketitle
+	\tableofcontents
+	
+	\section{Zadatak projekta}
+	 Zadatak projekta bio je implementacija protokola uCFtp\footnote{kvazi-FTP protokol za mikrokontrolere} za serversko-klijentsku komunikaciju. Serverska aplikacija izvršava se na mikrokontroleru \textit{Arduino} i napisana je u \textit{Arduino IDE} pomoću \textit{C} i \textit{C++} programskog koda. Serverska aplikacija sadrži uCFtp interfejs koji koristimo na klijentskoj strani za manipulisanje podacima koji se nalaze na serverskoj strani. Podatke na serverskoj strani smeštamo na memorijsku karticu.
+	Na klijentskoj strani imamo aplikaciju napisanu u programskom jeziku \textit{C\#}. Aplikacija je pisana u \textit{Visual Studio Code}. Komunikacija između serverske i klijentske strane izvršava se preko serijskog porta. 
+	
+	\section{Mentor}
+	Izrada projekta bila je u sklopu predmeta \textit{Seminarski C} i mentor na ovom projektu bio je izabrani profesor  Đorđe Herceg  sa Prirodno-matematičkog fakulteta u Novom Sadu departman za matematiku.
+	
+	\subsection{Reference}
+	
+	Većinu programskog koda koji koristimo na serverskoj strani predstavljaju kodovi koje je napisao  profesor Đorđe Herceg. \\Originalne kodove možemo naći na adresi: \textit{https://github.com/djherceg}
+	
+	
+	\section{Potrebni alati i povezivanje}
+	
+	
+	\subsection{Potrebni delovi}
+	
+	\begin{enumerate}
+		\item Arudino mikrokontroler
+		\item Arudino modul za čitanje SD kartica
+		\item 6 žica sa golim krajevima
+		\item Opcionalno: lemilica
+	\end{enumerate}
+
+	\subsection{Programska okruženja}
+	\label{l1}
+	\begin{enumerate}
+		\item Arduino IDE\\
+			Uputstvo za instalaciju:  https://www.Arduino.cc/en/software\\
+			Dodatne korišćene biblioteke koje je potrebno da instaliramo:
+			\begin{itemize}
+				\item SdFat biblioteku verzija: 2.0.1.
+				
+				Biblioteku možemo instalirati direktno u programu \textit{Arduino IDE} pomoću sledećih koraka:  [Tools]->[Manage Libraries]-> pretražujemo i instaliramo biblioteku sa nazivom SdFat autora Bill Greiman verzija 2.0.1.
+			\end{itemize}
+		
+		
+		\item .NET Core\\
+		 Koristili smo .NET Core SDK 3.1.407\\
+		Uputstvo za instalaciju: https://docs.microsoft.com/en-us/dotnet/core/install/\\
+		Dodatne korišćene biblioteke koje je potrebno da instaliramo:
+		\begin{itemize}
+			\item System.IO.Ports biblioteku verzija: 5.0.1
+			
+			Biblioteku možemo instalirati izvršavajući sledeću komandu:
+			\begin{small}
+				\begin{verbatim}
+				dotnet add package System.IO.Ports --version 5.0.1
+				\end{verbatim}
+			\end{small}
+		\end{itemize}
+		
+		
+	\end{enumerate}
+	
+	\subsection{Povezivanje mikrokontrolera i modula za čitanje SD kartica}
+	
+	Povezali smo pinove na sledeći način:
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|
+				>{\columncolor[HTML]{FFFFFF}}l |
+				>{\columncolor[HTML]{336699}}l |}
+			\hline
+			{\color[HTML]{3A3A3A} \textbf{MicroSD modul}} & \cellcolor[HTML]{FFFFFF}{\color[HTML]{3A3A3A} \textbf{ESP32}} \\ \hline
+			{\color[HTML]{3A3A3A} CS}                     & \cellcolor[HTML]{CC3333}{\color[HTML]{FFFFFF} pin10}          \\ \hline
+			{\color[HTML]{3A3A3A} MOSI}                   & {\color[HTML]{FFFFFF} pin11}                                  \\ \hline
+			{\color[HTML]{3A3A3A} MISO}                   & {\color[HTML]{FFFFFF} pin12}                                  \\ \hline
+			{\color[HTML]{3A3A3A} SCK}                    & {\color[HTML]{FFFFFF} pin13}                                  \\ \hline
+			{\color[HTML]{3A3A3A} GND}                    & {\color[HTML]{FFFFFF} GND}                                    \\ \hline
+			{\color[HTML]{3A3A3A} VCC}                    & \cellcolor[HTML]{333333}{\color[HTML]{FFFFFF} 5V}             \\ \hline
+		\end{tabular}
+		\caption{Povezivanje MicroSD modula sa Arduino mikrokontrolerom}
+		\label{tab:my-table}
+	\end{table}
+	
+	\begin{figure}[h]
+		\centering
+		\includegraphics[scale=0.22]{pov.jpeg}
+		\caption{povezivanje}
+	\end{figure}
+	\newpage
+
+	\subsection{Sinhronizacija protoka tunela}
+	Postavli smo brzinu protoka serijskog  čitanja i pisanja na 9600 baud u kodu.
+	
+
+
+	\section{Opis klijentskog C$\#$ koda}
+
+	\subsection{Opis glavnog C$\#$ fajla: Program.cs}
+	\label{csharpglavnikod}
+	
+	U fajlu \textit{Program.cs} možemo videti primer upotrebe klijentskog koda pomoću kojeg možemo da šaljemo komande prema Arduinu i tumačimo rezultate izvršenih komandi.
+	
+	Potrebno je da uvezemo u istom okruženju (\textit{namespace}-u) sledeće $.cs$ fajlove:
+	\begin{enumerate}
+		\item ArduinoCommands.cs (podsekcija \ref{a1}.)
+		\item ArduinoInterpreter.cs (podsekcija \ref{a2}.)
+		\item ArduinoIW.cs (podsekcija \ref{ArduinoIWSecion}.)
+		\item ArduinoMessageBuilder.cs (podsekcija \ref{a4}.)
+		\item CrcMath.cs (podsekcija \ref{a5}.)
+		\item ErrorsInternal.cs (podsekcija \ref{a6}.)
+		\item PortTalk.cs (podsekcija \ref{a7}.)
+		\item TalkBuffer.cs (podsekcija \ref{talkBufferSection}.)
+	\end{enumerate}
+	
+	U $Main$ metodi pokrećemo nit u kojoj čekamo, čitamo i obrađujemo dostupne podatke koji su primljeni sa komunikacionog tunela. 
+	Definišemo port preko kojeg  želimo da komuniciramo sa Arduinom. Koristimo objekat klase $SerialTalk$ koji sadrži osnovne metode za komunikaciju preko tunela.
+	
+	Nakon inicijalizacije i otvaranja tunela na odgovarajućem portu pomoću metode $setup()$ prosleđujemo tunel kao argument sledećim konstruktorima:
+	\begin{enumerate}
+		\item objektu klase $ArduinoIW$ koji koristimo za interpretaciju već pročitanih podataka sa tunela odnosno za interpretaciju podataka koji su spremni za obrađivanje. Takođe objekat klase $ArduinoIW$ koristimo i za pisanje podataka na prosleđeni tunel. U ovoj klasi ne izvršavamo čitanje sa tunela. 
+		\item objektu klase $TalkBuffer$ koji koristimo za čuvanje pročitanih podataka sa tunela.
+	\end{enumerate}  
+
+	U glavnom programu pratimo da li objekat klase $CommandObject$ koji predstavlja trenutni rezultat izvršene komande zavisi od objekta koji predstavlja rezultat sledeće izvršene komande pomoću indikatora koji smo nazvali $waitingForTheChain$. Na primer komanda ${GET}$ bez poslatog opcionalnog argumenta \textbf{crc} zavisi od sledeće izvršene komande (pogledati podsekciju \ref{getLabel1}). U ovom slučaju automatski šaljemo sledeću komandu sa nazivom ${CRC}$ i argumentima koji predstavljaju fajl-segment nad kojim je izvršena ${GET}$ komanda.
+	
+	Zavisnosti između dve uzastopne komande možemo da dodefinišemo (pogledati podsekciju  \textit{ArduinoCommands.cs}) .
+	
+	Nakon inicijalizacije potrebnih  objekata izvršavamo $while$ petlju.
+	U $while$ petlji očekujemo vrednost $true$ kao rezultat poziva metode $isavailable()$ nad objektom klase $TalkBuffer$. Vrednost $true$ označava da imamo dostupan bafer koji možemo da obrađujemo. Za dodatna uputstva oko čitanja podatka sa tunela pogledati sekciju \ref{talkBufferSection}.
+	
+	Ukoliko imamo dostupne podatke  za dalje obrađivanje, obrađujemo ih pomoću objekta koji predstavlja klasu \textit{ArduinoIW.cs}. Za dodatna uputstva pogledati podsekciju \ref{ArduinoIWSecion}. Obrađivanje vršimo pomoću metode $interpet()$. Ukoliko je obrađivanje bilo validano i rezultat ove metode predstavlja kompletan rezultat izvšene komande dalje proveravamo da li je rezultat zavistan od rezultata sledeće izvršene komande. U slučaju zavisnosti koristimo odgovarajuće provere da bi smo ispitali kompatibilnost između izvršenih komandi. Ukoliko nisu zavisni rezultati ispisujemo samo trenutni rezultat.
+	
+	Ukoliko rezultat nije validan preskačemo ispisivanje i premotavamo bafer (objekat klase $TalkBuffer$) do kraja ili do prvog $\$$ simbola. $\$$ simbol predstavlja kraj poruke. Takođe potrebno je da resetujemo graditelja koji sve vreme gradi rezultat izvršavanja komande i koji se nalazi u objektu koji predstavlja \textit{ArduinoIW.cs} klasu.
+	
+	Na kraju čuvamo rezultat trenutno izvršene komande u objektu koji predstavlja \textit{ArduinoIW.cs} klasu i ukoliko smo obradili ceo bafer očistimo ga $sb.clear()$.
+	
+	\subsection{ArduinoCommands.cs}
+	\label{a1}
+	\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+		(a)CommandObject
+		--->CommentCommandObject
+		--->DirCommandObject
+		--->ErrorCommandObject
+		--->MdCommandObject
+		--->CdCommandObject
+		--->PutCommandObject
+		--->GetCommandObject
+		--->DelCommandObject
+		--->CrcCommandObject
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U fajlu $ArduinoCommands.cs$ definišemo validiranje pojedinačnih delova rezultata izvršene komande.
+	
+	Opšti šablon rezultata izvršene komande po delovima može da izgleda: 
+	\begin{enumerate}
+		\item header deo:
+		\begin{itemize}
+			\item $\#OK \: arg1 \: arg2$
+			\item ili $\#ERROR \: arg1 \: arg2$
+		\end{itemize}
+		\item payload deo, sadrži linije koje počinju simbolom $>$. Primer:
+		\begin{verbatim}
+		> file1 2
+		> file2 10
+		\end{verbatim}
+		\item footer deo, sadrži jednu reč, reč $\#END$ kojom označavamo da smo dobili celu poruku. Nakon reči $\#END$ u sledećem redu sledi simbol $\$$ kojim označavamo da je Arduino spreman da prima nove komande.
+	\end{enumerate}
+	
+	Konkretan objekat koji dopunjuje i predstavlja implementaciju apstraktne-klase $CommandObject$ koristimo za predstavljanje rezultata izvršene komande.\\ U njemu deklarišemo i definišemo:
+	 \begin{enumerate}
+	 	\item promenljive u kojima skladištimo prosleđene argumente za ponuđene parametre
+	 	\item da li je kompletiran
+	 	\item da li je validan 
+	 	\item da li je zavistan od rezultata izvršavanja sledeće komande
+	 	\item  metode u kojima obrađujemo linije payload-a
+	 	\item ostale pomoćne metode kao što su ispis rezultata i ostalo
+	 \end{enumerate} 
+ 
+	Sada možemo detaljnije opisati i klase koje implementiraju ovu apstraktnu klasu. Za sve podržane komande na Arduinu imamo odgovarajuće klase koje koristimo za validaciju primljenog rezultata odgovarajuće izvršene komande. Implementirali smo sledeće klase:
+	\begin{enumerate}
+		\item $CommentCommandObject$ \\ obrađujemo komentar poslat sa Arduina.
+		\item $DirCommandObject$ \\ obrađujemo rezultat izvršavanja $dir$ komande.
+		\item $ErrorCommandObject$ \\obrađujemo rezultat izvršavanja $er$ komande.
+		\item $MdCommandObject$ \\ obrađujemo rezultat izvršavanja $md$ komande.
+		\item $CdCommandObject$ \\obrađujemo rezultat izvršavanja $cd$ komande.
+		\item $PutCommandObject$ \\obrađujemo rezultat izvršavanja $put$ komande.
+		\item $GetCommandObject$ \\ obrađujemo rezultat izvršavanja $get$ komande.
+		\item $DelCommandObject$ \\ obrađujemo rezultat izvršavanja $del$ komande.
+		\item $CrcCommandObject$ \\ obrađujemo rezultat izvršavanja $crc$ komande.
+	\end{enumerate}
+	
+	U klasi $ArduinoCommands$ nabrojali smo nazive komandi.
+	
+	Objekat klase $CommandObject$ sadrži i metode za definisanje zavisnosti između rezultata trenutno izvršene komande i sledećeg $CommandObject$ objekta koji će predstavljati rezultat sledeće izvršene komande.
+	Koristimo sledeće metode za definisanje zavisnosti:
+	\begin{enumerate}
+		\item (virtuelnu) $checkChainCmdResult$ u kojoj možemo dodefinisati način provere zavisnosti
+		\item $getChainCommandName$ za vraćanje naziva komande od koje zavisi $this$ objekat
+		\item $checkChainCommandName$ za proveru podudarnosti naziva komandi
+		\item $isWaitingForTheChain$ u kojoj definišemo da li objekat koji predstavlja rezultat trenutno izvršene komande poseduje zavisnost sa objektom koji predstavlja rezultat sledeće izvršene komande
+	\end{enumerate}
+	
+	\subsection{ArduinoInterpreter.cs}
+	\label{a2}
+	
+	\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	(a)ArduinoLineProccesor
+	--->HeaderLineProccessor
+	--->ResultLineProccessor
+	--->FooterLineProccessor
+	ProccessorObjectResult
+	ArduinoInterpreter
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	
+	U fajlu $ArduinoIntepreter.cs$ definišemo klase i metode pomoću kojih obrađujemo poruku koju smo izgradili od podataka koji su se nalazili na baferu.
+	Kao bazu imamo apstraktnu klasu $ArduinoLineProccesor$ u kojoj deklarišemo apstraktni metod $proccess$ u kojem konkretne klase navode proceduru obrađivanja svog dela poruke.
+	Imamo klase-obrađivače za svaki deo poruke:
+	\begin{enumerate}
+		\item $HeaderLineProccessor$ \\ obrađujemo liniju poruke koja bi trebala da predstavlja header
+		\item $ResultLineProccessor$ \\ obrađujemo liniju poruke koja bi trebala da predstavlja liniju payload-a
+		\item $FooterLineProccessor$ \\obrađujemo liniju poruke koja bi trebala da predstavlja footer.
+	\end{enumerate} 
+
+	Kao klasu vodilju imamo klasu $ArduinoInterpreter$ u kojoj obrađujemo celokupnu poruku koja je sastavljena od podataka sa bafera.
+	Prvo obrađujemo header, nakon toga payload i na kraju footer i vraćamo odgovarajući rezultat.
+	
+	Koristimo objekat klase $ProccessorObjectResult$ kao internu enkapsulaciju objekta klase $CommandObject$. Svrha klase $ProccessorObjectResult$ je kompatibilnije prenošenje rezultata između više obrađivača celokupne poruke.
+	
+	\subsection{ArduinoIW.cs}
+	\label{ArduinoIWSecion}
+	
+	\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	ArduinoIW
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U ovom fajlu definišemo klase i metode za obrađivanje rezultata izvršene komande i slanje nove komande ka Arduinu. Na početku imamo objekat klase $ArduinoIW$ čijem konstruktoru prosleđujemo objekat klase $PortTalk$ u kojem definišemo tunel preko kojeg možemo da šaljemo podatke ka Arduinu. Korišćenjem metode $WriteLine$ nad objektom klase $PortTalk$ možemo da pošaljemo liniju teksta ka Arduinu i metodom $interpret$ možemo da obradimo rezultat izvršene komande. U metodi $interpret$ koristimo objekat klase $ArduinoInterpret$. Objekat klase $ArduinoInterpret$ sadrži odgovarajuće metode za obrađivanje pojedinačnih delova poruke. 
+	Najpre uzmemo sve podatke koje smo pročitali sa ($PortTalk$) tunela  i sačuvali u ($TalkBuffer$) bafer i proveravamo da li trenutni podaci zadovoljavaju opšti šablon validne poruke. Celokupnu poruku gradimo pomoću objekta klase $ArduinoMessageBuilder$.
+		
+	
+	
+	Ukoliko je zadovoljen opšti šablon validne poruke odnosno ukoliko pozivom metode $isComplete()$  nad objektom klase $ArduinoMessageBuilder$ dobijemo povratnu vrednost $true$ prosleđujemo celokupnu poruku na dalje obrađivanje. Sledeći korak obrade predstavlja korak građenja objekta koji predstavlja rezultat izvršene komande. Podržane komande možemo videti u sekciji $ArduinoCommands.cs$. Za ovaj korak koristimo metodu $proccess()$ objekta klase $ArduinoInterpreter$. Ukoliko uspešno obradimo podatke metodom $proccess()$ vratićemo objekat koji predstavlja rezultat izvršene komande. U suprotnom vraćamo vrednost $null$. U ovom slučaju  povratna vrednost signalizira da nismo uspešno uspeli  da validiramo podatke. Takođe u ovom slučaju resetujemo graditelja celokupne poruke pomoću $resetResultBuilder$.
+	
+	Ukoliko objekat koji predstavlja rezultat izvršene komande nije validan ili je kompletiran potrebno je isto da resetujemo graditelja celokupne poruke.
+	
+	U objektu klase $ArduinoInterpreter$ čuvamo objekat koji predstavlja rezultat prethodno izvršene komande. Koristimo $getPreviousCommandObject$ i\\ $setPreviousCommandObject$ metode za postavljanje i vraćanje objekta koji predstavlja rezultat prethodno izvršene komande.
+	
+	\subsection{ArduinoMessageBuilder.cs}
+	\label{a4}
+		\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	(a)MessagePartitionBuilder
+	--->HeaderPartitionBuilder
+	--->PayloadPartitionBuilder
+	--->FooterPartitionBuilder
+	--->ResultMessageBuilder
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U ovom fajlu definišemo klase i metode za gradnju celokupne poruke koja bi trebala da predstavlja rezultat izvršene komande. Celokupna poruka  sastoji se iz header-a, payload-a i footer-a. Imamo odgovarajuće graditelje i u svakom od njih različita stanja u kojima mogu biti. U graditeljima ne ispitujemo validnost poruke već samo popunjavamo prazna mesta definisana šablonom opšte poruke. Imamo sledeće graditelje i stanja:
+	\begin{enumerate}
+		\item HeaderPartitionBuilder i stanja:
+		\begin{enumerate}
+			\item STATUS\_MODE, stanje u kojem očekujemo prvu reč koja bi trebala da opisuje da li se komanda uspešno izvršila ili ne. Reči su razdvojeni razmakom.
+			\item CMD\_NAME\_MODE, stanje u kojem očekujemo drugu reč koja bi trebala da opisuje naziv komande koju smo pokušali da izvršimo.
+			\item FILE\_PATH\_MODE, stanje u kojem očekujemo treću reč koja bi trebala da opisuje fajl nad kojim smo pokušali da izvršimo komandu.
+		\end{enumerate}
+		\item PayloadPartitionBuilder i stanja:
+		\begin{enumerate}
+		\item LINE\_MODE, stanje u kojem očekujemo liniju payload-a
+		\end{enumerate}
+		\item FooterPartitionBuilder i stanja:
+		\begin{enumerate}
+			\item STATUS\_MODE, stanje u kojem očekujemo prvu reč koja bi trebala da se poklapa sa stringom $\#END$.
+		\end{enumerate}
+	\end{enumerate}
+
+	U svakom od graditelja gradimo sve dok ne naiđemo na liniju koja počinje simbolom koji predstavlja sledeću particiju poruke.
+	
+	Kao glavnog dirigenta imamo objekat klase $ResultMessageBuilder$. Objekat klase $ResultMessageBuilder$ takođe sadrži  metodu $build$ kojoj prosleđujemo po jednu liniju na obrađivanje. U metodi $build$ prosleđujemo dalje liniju odgovarajućem graditelju. Objekat klase $ResultMessageBuilder$ može biti u stanju:
+	\begin{enumerate}
+		\item HEADER\_MODE, stanje predstavlja da trenutno gradimo header deo poruke
+		\item PAYLOAD\_MODE, stanje predstavlja da trenutno gradimo payload deo poruke
+		\item FOOTER\_MODE, stanje predstavlja da trenutno gradimo footer deo poruke
+		\item MSG\_COMPLETE\_MODE, stanje predstavlja da smo uspešno izgradili celu poruku i naišli na simbol $\$$. Simbol $\$$ predstavlja indikator da je Arduino spreman da prima nove komande.
+	\end{enumerate}
+
+	\subsection{PortTalk.cs}
+	\label{a7}
+		\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	(a)PortTalk
+	--->SerialTalk
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U ovom fajlu definišemo apstraktnu klasu $PortTalk$ u kojoj deklarišemo osnovne apstraktne metode za komunikaciju preko tunela. Klase koje nasleđuju $PortTalk$ definišu način komunikacije preko tunela. Imamo konkretnu klasu $SerialTalk$. U klasi $SerialTalk$ nasleđujemo i definišemo sve apstraktne metode iz baze klase $PortTalk$. Objekat klase $SerialTalk$ koristimo za komunikaciju preko serijskog porta. Metode smo definisali na sledeći način: 
+	\begin{enumerate}
+		\item U metodi $setup()$ inicijalizujemo tunel. Koristimo objekat klase $SerialPort$ koji se nalazi u paketu System.IO.Ports. Koristili smo verziju paketa 5.0.1.
+		\begin{enumerate}
+			\item Navodimo COM tunela: /dev/ttyACM0
+			\item Brzinu protoka: 9600
+			\item Otvaramo tunel
+		\end{enumerate}
+	Ove operacije izvršavamo pomoću metode $setup()$ nad objektom klase $SerialTalk$. Nakon poziva metode $setup()$ spremni smo za minipulisanje podacima preko tunela.
+		 
+	\end{enumerate}
+
+	\subsection{TalkBuffer.cs}
+	\label{talkBufferSection}
+		\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	TalkBuffer
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U ovom fajlu definišemo klasu i metode pomoću kojih čuvamo pročitane podatke sa tunela. Objekat klase $TalkBuffer$ predstavlja "ne školski" omotač nad objektom klase $PortTalk$. U konstruktoru prosleđujemo  objekat klase $PortTalk$ odnosno tunel sa kojeg čitamo podatke. 
+	Koristimo metodu $loop()$ za čitanje i čuvanje podatka sa tunela. Definisali smo stop vremenski interval za čitanje na 50ms. Ukoliko je vremenska razlika između dva trenutka u kojima imamo dostupne podatke na tunelu veća od 50ms postavljamo indikator sa nazivom $finished$ da imamo podatke koji su spremni za dalje obrađivanje. Objekat klase $TalkBuffer$ poseduje i ostale metode i promenljive za manipulisanje baferom:
+	\begin{enumerate}
+		\item promenljivu $position$ koristimo da označimo na kojem mestu u baferu se trenutno nalazimo
+		\item metodu $read()$ koristimo za čitanje bafera na $position$ poziciji
+		\item metodu $peek(int \; offset)$ koristimo za vraćanje karaktera u baferu koji se nalazi na $position+offset$ poziciji
+		\item metodu $isnext()$ koristimo da proverimo da li smo naišli na kraj bafera
+		\item metodu $isnext(int \: offset)$ koristimo da proverimo da li $position+offset$ pozicija je validna pozicija u baferu
+		\item metodu $isavailable()$ koristimo da proverimo da li imamo podatke u baferu koji su spremni za dalje obrađivanje
+		\item metodu $clear()$ koristimo za vraćanje na početno stanje
+	\end{enumerate}
+	
+	\subsection{CrcMath.cs}
+	\label{a5}
+		\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	CrcMath
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	U ovom fajlu definišemo metode za izračunavanje CRC16 vrednosti za prosleđen string ili celobrojni broj. Algoritami koji koristimo za izračunavanje CRC16 vrednosti se poklapa sa algoritmom koji je trenutno u upotrebi na Arduino platformi.
+	
+	\subsection{ErrorsInternal.cs}
+	\label{a6}
+		\subsubsection*{Struktura fajla}
+	\begin{verbatim}
+	ErrorsApp
+	\end{verbatim}
+	
+	\subsubsection*{Opis}
+	\label{errorsDesc}
+	U ovom fajlu definišemo strukture za čuvanje grešaka. Greške mogu da se jave:
+	\begin{enumerate}
+		\item interno odnosno u procesu validiranja poruke koja predstavlja rezultat izvršene komande poslate sa serverske strane
+		\item eksterno odnosno greške koje su nastale na serverskoj strani u procesu obrađivanja poslate komande 
+	\end{enumerate}  
+	
+	Koristimo globalno statičnu promenljivu $errno$ u kojoj smeštamo celobrojnu vrednost trenutne greške. U bilo kojem delu koda možemo da pozovemo statičnu metodu $ErrorsApp.get()$ kojom vraćamo vrednost tipa $string$ kojom opisujemo trenutnu grešku. Podržane greške čuvamo u niz sa nazivom $errors$. Rezervisali smo:
+	\begin{enumerate}
+		\item od [0-9] mesta za interne greške. Interne greške čuvamo u $enum$ sa nazivom $ErrnoInternalCodes$. Prva greška ima vrednost 0 i svaka naredna za po jednu veću. Lista sadrži:
+		\begin{enumerate}
+			\item $STATUS\_PROCCESSOR\_ERROR\_NOT\_VALID\_HEADER$ - greškom označavamo da header poruke nije validan odnosno ne ispunjava šablon validnog header-a
+			\item $STATUS\_PROCCESSOR\_ERROR\_NOT\_VALID\_PAYLOAD$ - greškom označavamo da payload poruke nije validan odnosno ne ispunjava šablon validnog payload-a
+			\item $STATUS\_PROCCESSOR\_ERROR\_NOT\_VALID\_FOOTER$ -\\
+			 greškom označavamo da footer poruke nije validan odnosno ne ispunjava šablon validnog footer-a
+			\item $STATUS\_PROCCESSOR\_ERROR\_UNKNOWN\_CMD$ -\\ greškom označavamo da header poruke za drugi parametar (naziv komande koja je izvršena) sadrži argument naziv komande koja nije podržana
+			\item $RESULT\_PROCCESSOR\_ERROR\_COMMAND\_PARSE$ -\\greškom označavamo da payload poruke nije validan odnosno ne ispunjava šablon validnog payload-a
+			\item $RESULT\_PROCCESSOR\_ERROR\_RESULT\_LINE\_MISSING$ - greškom opisujemo konkretnije da linija koja predstavlja deo payload poruke ne počinje simbolom $>$.
+			
+		\end{enumerate}
+		\item od [10-99] mesta za eksterne greške. Eksterne greške čuvamo u $enum$ sa nazivom $ErrnoExternalCodes$. Prva greška ima vrednost 10 i svaka naredna za po jednu veću. Lista sadrži:
+		\begin{enumerate}
+			\item od [10-49] predstavljaju mesta za greške koje su nastale prilikom obrade poslate komande na serverskoj strani:
+			\begin{enumerate}
+				\item $CMD\_ERR\_GENERALERROR$ - \\predstavlja opštu grešku
+				\item $CMD\_ERR\_MISSINGARGUMENT$ -\\ greška ukazuje na nedostatak argumenta za odgovarajući parametar
+				\item $CMD\_ERR\_EXTRAARGUMENT$ -\\  greška ukazuje na prekoračenje broja prosleđenih argumenta
+				\item $CMD\_ERR\_INVALIDVALUE$ -\\  greška ukazuje da prosleđeni argument nije validan
+				\item $CMD\_ERR\_VALUEOUTOFRANGE$ -\\  greška ukazuje da prosleđeni argument se ne nalazi u skupu dozvoljenih vrednosti
+				\item $CMD\_ERR\_UNKNOWNCOMMAND$ -\\  greška ukazuje da prosleđeni argument koji odgovara parametru naziva komande koju želimo da izvršimo predstavlja naziv komande koja nije podržana na Arduinu
+				
+			\end{enumerate}
+			\item ostalih [50-99] grešaka predstavljaju greške koje su nastale prilikom manipulisanja podacima na Arduinu prilikom obrade poslate komande.
+		\end{enumerate} 
+	\end{enumerate}
+	
+	\section{Pokretanje programa i uključivanje projektnog koda u ostalim projektima}
+
+\subsection{Uputstvo za pokretanje programa}
+
+\begin{enumerate}
+	\item Otvaramo .ino fajl u Arduino IDE koji se nalazi u folderu ArduinoFiles/Program
+	\item Presnimimo program na Arduino mikrokontroler
+	\item Pokrećemo program kojim možemo da čitamo i interpretiramo rezultate izvršene komande. Program se nalazi u folderu NETCore/Program/ReadProgram i možemo ga pokrenuti pomoću dotnet komande:
+	\begin{small}
+		\begin{verbatim}
+		dotnet run
+		\end{verbatim}
+	\end{small} 
+	\item Pokrećemo program kojim možemo da šaljemo komande ka Arduinu. Program se nalazi u folderu NETCore/Program/WriteProgram.
+\end{enumerate}
+
+Sada možemo da šaljemo komande ka Arduinu i čitamo rezultate izvršenih komandi.
+
+\subsection{Uputstvo za korišćenje projektnog koda u ostalim projektima}
+\subsubsection{Arduino projektni kod}
+
+Potrebno je da obezbedimo i uvezemo odgovarajuće fajlove koji su opisani u sekciji \ref{Arduinoglavnikod} sa nazivom \textit{Opis glavnog Arduino koda - SerijskiKomandniProcesorSDCARD.ino}.
+
+U glavnom programu uvozimo sledeće fajlove:
+\begin{itemize}
+	\item cmdProc.h
+	\item buf.h
+	\item sdCardManipulator.h
+\end{itemize}
+
+U sekciji \ref{Arduinoglavnikod} možemo videti logiku iza upotrebe klasa, metoda i promenljivih koji su sadržani u gore navedim fajlovima.
+
+
+\subsubsection{.NET projektni kod}
+
+Potrebno je da obezbedimo i uvezemo u radno okruženje (\textit{namespace}) sve fajlove koji su opisani u sekciji \ref{csharpglavnikod} sa nazivom \textit{Opis glavnog C\# koda  - Program.cs}.
+
+Takođe potrebno da uradimo i sledeće:
+\begin{enumerate}
+	\item dodamo u  fajlu sa nazivom \textit{.csproj} sledeće linije:
+	\begin{verbatim}
+	<ItemGroup>
+	<ProjectReference Include=
+	"..\\NETCore\Program\ReadProgram\coreapp.csproj" />
+	</ItemGroup>
+	\end{verbatim}
+	\item uvezemo paket $System.IO.Ports$:
+	\begin{verbatim}
+	<ItemGroup>
+	<PackageReference Include="System.IO.Ports" Version="5.0.1" />
+	</ItemGroup>
+	\end{verbatim}
+\end{enumerate}
+
+
+
+\section{Uputstvo za korišćenje komandi}
+
+
+\subsection{Značenje simbola}
+\begin{table}[h]
+	\centering
+	\scalebox{1}{
+	\begin{tabular}{|l|l|l|}
+		\hline
+		\$             & 
+		\begin{tabular}[c]{@{}l@{}}Nakon izvršavanja tekuće naredbe signaliziramo da smo spremni \\za prijem nove naredbe i šaljemo simbol \$ klijentskoj strani\end{tabular} 
+		    \\ \hline
+		\#END          & Signaliziramo korisniku da je prethodni ispis završen                                            \\ \hline
+		@              & Poruke informativnog karaktera sadrže kao prvi znak "@"                                        \\ \hline
+		\textgreater{} & Linije payload-a imaju prvi znak "\textgreater{}"                                                \\ \hline
+		\#             & Linije koje počinju ovim simbolom označavaju status                                              \\ \hline
+	\end{tabular}
+}
+	\caption{Značenje simbola}
+	\label{tab:my-table}
+\end{table}
+
+
+Prilikom slanja komande ka Arduinu  pored naziva komande navodimo i argumente za odgovarajuće parametre koji su podržani za navedenu komadnu.
+
+
+
+\subsection{Povratne vrednosti u opštem slučaju}
+	
+	\label{povratnevrednosti}
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR <command-name> ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	$ERROR\_CODE$ predstavlja celobrojni broj kojim opisujemo grešku nastalu pri izvršavanju  komande sa nazivom \verb|<command-name>|.\\
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK <command-name> <file-path>
+	> <function-results-list>
+	#END
+	$
+	\end{verbatim}
+	Značenje parametara:
+	\begin{enumerate}
+		\item \verb|command-name| predstavlja naziv komande koju smo uspešno izvršili
+		\item \verb|file-path| predstavlja putanju fajla ili foldera nad kojim smo uspešno izvršili
+	\end{enumerate}
+	 
+	komandu.
+	
+\end{itemize}
+
+\subsection{Lista podržanih komandi i povratne vrednosti}
+\subsubsection{HELP}
+Koristimo za vraćanje uputstva za korišćenje podržanih komandi.\\
+Upotreba
+\begin{verbatim}
+help
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK help <cwd>
+	> <available-commands-list>
+	#END
+	$
+	\end{verbatim}
+\end{itemize}
+
+\begin{enumerate}
+	\item \verb|cwd| predstavlja putanju trenutno radnog direktorijuma
+	\item \verb|available-commands-list| predstavlja listu podržanih komandi
+\end{enumerate}
+
+
+Primer:
+\begin{verbatim}
+
+[\folder1\folder2]: help
+#OK help \folder1\folder2
+> <available-commands-list>
+#END
+$
+\end{verbatim}
+
+\subsubsection{DIR}
+Koristimo za vraćanje liste fajlova sa dužinama iz tekućeg foldera.
+Prilikom uspešnog izvršavanja vraćamo $\#OK$ i ime tekućeg foldera i zatim u narednim redovima listu fajlova sa dužinama.
+Upotreba
+\begin{verbatim}
+dir
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{small}
+	\begin{verbatim}
+	#ERROR dir ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+\end{small}
+	Lista kodova grešaka:
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			50 & SdFat open: Unable to open the current working directory \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK dir <folder-path>
+	><folder-listing>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|folder-path| predstavlja naziv direktorijuma koji smo uspešno pročitali
+		\item \verb|folder-listing| predstavlja listu fajlova koji se nalaze u pročitanom folderu
+	\end{enumerate}
+\end{itemize}
+Primer:
+\begin{verbatim}
+
+[\folder1\folder2]: dir
+#OK dir \folder1\folder2
+>10 fajl1
+>13 fajl2
+>0 folder3\
+#END
+$
+\end{verbatim}
+
+\subsubsection{CD}
+Vraćamo tekući folder sa poslatom $CD$ komandom bez argumenta ili zadajemo tekući folder ukoliko je poslata komanda sa odgovarajućim argumentom. Ukoliko je argument "/" postavljamo tekući folder na root.\\
+Upotreba:
+\begin{verbatim}
+cd [<relative-path>]
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR cd ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			52 & SdFat chdir: Can't change to the folder (Check if the folder exists) \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK cd <cwd-path>
+	>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|cwd-path| predstavlja putanju trenutno radnog direktorijuma
+	\end{enumerate}
+\end{itemize}
+Primer:
+\begin{verbatim}
+
+[\folder1\folder2]: cd folder3
+#OK \cd folder1\folder2\folder3
+>
+#END
+$
+\end{verbatim}
+
+\subsubsection{MD}
+Kreiramo novi folder unutar tekućeg foldera.
+Vraćamo  $\#OK$ i ime foldera ako prilikom uspešnog izvravanja ili $\#ERROR$ ukoliko se javila greška.\\
+Upotreba
+\begin{verbatim}
+md <folder-name>
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR md ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			53 & SdFat exists: File with the same name already exists. \\ \hline
+			55 & SdFat mkdir: Can't make a folder                      \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK md <folder-path>
+	>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|folder-path| predstavlja putanju novog uspešno napravljenog direktorijuma
+	\end{enumerate}
+\end{itemize}
+Primer:
+\begin{verbatim}
+
+[\folder1\folder2]: md folder4
+#OK md \folder1\folder2\folder4
+>
+#END
+$
+\end{verbatim}
+
+\subsubsection{DEL}
+Brišemo zadati folder ili fajl unutar tekućeg foldera. Ako ne možemo da obrišemo vraćamo grešku.
+Vraćamo $\#OK$ i ime fajla prilikom uspešnog izvršavanja ili $\#ERROR$ ako se javila greška.\\
+Upotreba
+\begin{verbatim}
+del <file-name>
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR del ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			54 & SdFat exists: File doesn't exists       \\ \hline
+			50 & SdFat open: Can't access to the file    \\ \hline
+			56 & SdFat rmRfStar: Can't delete the folder \\ \hline
+			57 & SdFat remove: Can't delete the file     \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK del <file-name>
+	>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|file-name| predstavlja putanju fajla koji smo uspešno izbrisali
+	\end{enumerate}
+\end{itemize}
+Primer:
+\begin{verbatim}
+
+[\folder1\folder2]: del folder4
+#OK del \folder1\folder2\folder4
+>
+#END
+$
+\end{verbatim}
+
+\subsubsection{CRC}
+CRC komandom izračunavamo CRC16 checksum fajl segmenta i opcionalno ga upoređujemo sa prosleđenim odgovarajućim argumentom.
+Vraćamo dužinu fajla i CRC16 vrednost fajl segmenta kao dva celobrojna broja razdvojena razmakom.\\
+\begin{enumerate}
+	\item Upotreba 1
+	\begin{verbatim}
+	crc <file-name> <start> <length>
+	\end{verbatim}
+	\item Upotreba 2
+	\begin{verbatim}
+	crc <file-name> <crc-value>
+	\end{verbatim}
+	\item Upotreba 3
+	\begin{verbatim}
+	crc <file-name> <start> <length> crc-value
+	\end{verbatim}
+\end{enumerate}
+
+
+\begin{enumerate}
+	\item \verb|file-name| - predstavlja ime fajla za čiji segment želimo da izračunamo crc
+	\item \verb|start| - predstavlja startnu poziciju sa koje želimo da počnemo računanje CRC vrednosti
+	\item \verb|length| - predstavlja broj karaktera nakon startne pozicije nad kojima želimo da izračunamo CRC vrednost
+	\item \verb|crc-value| - predstavlja CRC vrednost koju želimo da proverimo da li je jednaka izračunatoj CRC vrednosti na serverskoj strani za odgovarajući segment fajla sa nazivom \verb|file-name|. Ukoliko ne navedemo argument za parametre \verb|start| i \verb|length| podrazumevano računamo CRC vrednost za ceo fajl.
+\end{enumerate}
+
+
+Ukoliko ne navedemo argument za parametre \verb|start| i \verb|length| podrazumevano uzimamo za $start=0$ i za $length$ dužinu celog \verb|file-name| fajla.
+
+
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR crc ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			54 & SdFat exists: File doesn't exists       \\ \hline
+			50 & SdFat open: Can't access to the file    \\ \hline
+			56 & SdFat rmRfStar: Can't delete the folder \\ \hline
+			57 & SdFat remove: Can't delete the file     \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje - ishod 1\\
+	\begin{verbatim}
+	#OK crc <file-path>
+	><start> <length>
+	><file-length> <crc-value>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|start| predstavlja startnu poziciju sa koje smo počeli računanje CRC vrednosti
+		\item \verb|length| predstavlja broj karaktera nakon startne pozicije nad kojima je smo izračunali CRC vrednost
+		\item \verb|file-path| predstavlja putanju fajla nad kojim smo za segment $[start-(start+length-1)]$ uspešno izračunali CRC vrednost
+		\item \verb|crc-value| predstavlja CRC vrednost za segment $[start-(start+length-1)]$
+	\end{enumerate}
+	
+	\item Uspešno izvršavanje - ishod 2\\
+	\begin{verbatim}
+	#OK crc <file-path>
+	><start> <length>
+	><file-length> <0>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item Ovaj ishod se razlikuje od ishoda 1 samo u poslednjem podatku \verb|<0>| kojim označavamo da CRC vrednost koju smo prosledili sa klijentske strane nije jednaka izračunatoj CRC vrednosti na serverskoj strani
+	\end{enumerate}
+	
+	\item Uspešno izvršavanje - ishod 3\\
+	\begin{verbatim}
+	#OK crc <file-path>
+	><start> <length>
+	><file-length> <1>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item Ovaj ishod se razlikuje od ishoda 1 samo u poslednjem podatku \verb|<1>| koji označavamo da CRC vrednost koju smo prosledili sa klijentske strane  jednaka je izračunatoj CRC vrednosti na serverskoj strani
+	\end{enumerate}
+	
+	
+\end{itemize}
+Primer 1:
+\begin{verbatim}
+
+[\folder1\folder2]: crc fajl1
+#OK crc \folder1\folder2\fajl1
+>687 19238
+#END
+$
+
+\end{verbatim}
+Primer 2:
+\begin{verbatim}
+[\folder1\folder2]: crc fajl1 19238
+#OK crc \folder1\folder2\fajl1
+>687 1
+#END
+$
+\end{verbatim}
+
+\subsubsection{PUT}
+Snimamo $n$ bajtova u zadati fajl. Bajtovi su zadati kao celobrojne vrednosti u ASCII kodu. Primer PUT "fajl.txt" 65
+66 67 69 --> u fajlu će se naći slova "ABCE". Ako fajl ne postoji, kreiramo ga. Ako postoji  bajtove dodajemo na njega.\\
+Upotreba
+\begin{verbatim}
+put <file-name> <array-of-dec-values>
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR put ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			50 & \begin{tabular}[c]{@{}l@{}} SdFat open: File exists but we couldn't open the file\\ (check if the folder with same name exists.)\end{tabular}  \\ \hline
+			51 & SdFat open: Can't create file.                                                                     \\ \hline
+			61 & Parsing error: Not valid argument. (Unsuccessful decimal value parsing)                            \\ \hline
+		\end{tabular}
+	|
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje\\
+	\begin{verbatim}
+	#OK put <file-name>
+	><written-data-length>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|written-data-length| predstavlja broj uspešno upisanih podataka
+		\item \verb|file-name| predstavlja naziv fajla u kojem smo uspešno upisali \verb|written-data-length| podataka
+	\end{enumerate}
+\end{itemize}
+Primer:
+\begin{verbatim}
+[\folder1\folder2]: put new_file 65 66
+#OK put \folder1\folder2\new_file
+>2
+#END
+$
+\end{verbatim}
+
+
+\subsubsection{GET}
+\label{getLabel1}
+Vraćamo sadržaj fajl segmenta u vidu niza celobrojnih brojeva.
+Počinjemo čitanje od pozicije $start$ i čitamo $length$ bajtova. Na kraju niza bajtova opcionalno dodajemo CRC16 vrednost
+za pročitani blok.\\
+
+
+\begin{enumerate}
+	\item Upotreba 1
+	\begin{verbatim}
+	get <file-name> 
+	\end{verbatim}
+	\item Upotreba 2
+	\begin{verbatim}
+	get <file-name> <start> <length>
+	\end{verbatim}
+	\item Upotreba 3
+	\begin{verbatim}
+	get <file-name> "crc"
+	\end{verbatim}
+	\item Upotreba 4
+	\begin{verbatim}
+	get <file-name> <start> <length> "crc"
+	\end{verbatim}
+\end{enumerate}
+
+
+\begin{enumerate}
+	\item \verb|file-name| - predstavlja ime fajla koji želimo da čitamo
+	\item \verb|start| - predstavlja startnu poziciju sa koje želimo da počnemo čitanje
+	\item \verb|length| - predstavlja broj karaktera nakon startne pozicije koje želimo da pročitamo
+	\item \verb|"crc"| - predstavlja doslovan argument. Ovim argumentom označavamo da želimo da izračunamo CRC vrednost za odgovarajući segment fajla sa nazivom \verb|file-name|.  Ukoliko ne navedemo argument za parametre \verb|start| i \verb|length| podrazumevano računamo CRC vrednost za ceo fajl.
+\end{enumerate}
+
+Upotreba\\
+\begin{verbatim}
+get <file-name> [<start> <length>] ["crc"]
+\end{verbatim}
+Povratne vrednosti
+\begin{itemize}
+	\item Slučaj greške\\
+	\begin{verbatim}
+	#ERROR get ERROR_CODE
+	>
+	#END
+	$
+	\end{verbatim}
+	
+	% Please add the following required packages to your document preamble:
+	% \usepackage[normalem]{ulem}
+	% \useunder{\uline}{\ul}{}
+
+	\begin{table}[h]
+		\centering
+		\begin{tabular}{|l|l|}
+			\hline
+			66 & \begin{tabular}[c]{@{}l@{}}Not valid argument.\\ (Unsuccessful decimal value parsing for the \textless{}start\textgreater argument)\end{tabular}                                \\ \hline
+			67 & \begin{tabular}[c]{@{}l@{}}Not valid argument.\\ (Unsuccessful decimal value parsing for the \textless{}length\textgreater argument)\end{tabular}                               \\ \hline
+			68 & \begin{tabular}[c]{@{}l@{}}Not valid arguments.\\ (\textless{}start\textgreater + \textless{}length\textgreater is greater then the size of the file) \end{tabular}             \\ \hline
+			69 & \begin{tabular}[c]{@{}l@{}}Not valid arguments.\\ (The \textless{}start\textgreater argument is not null but the \textless{}length\textgreater argument is null)\end{tabular}   \\ \hline
+			52 & \begin{tabular}[c]{@{}l@{}}SdFat open: File exists but we couldn't open the file\\ (check if the folder with same name exists.)\end{tabular}                                    \\ \hline
+			60 & Fgets: Can't read from a file                                                                                                       \\ \hline
+			61 & Fgets: Can't read from a file {[}line too long{]}                                                                                   \\ \hline
+			54 & SdFat exists: File doesn't exist                                                                                                    \\ \hline
+		\end{tabular}
+		\caption{Značenje kodova grešaka}
+		\label{tab:my-table}
+	\end{table}
+	\item Uspešno izvršavanje - ishod 1\\
+	\begin{verbatim}
+	#OK get <file-name>
+	><start> <length>
+	><file-sector-data>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item \verb|start| predstavlja startnu poziciju sa koje smo počeli čitanje
+		\item \verb|length| predstavlja broj karaktera nakon startne pozicije koje smo pročitali
+		\item \verb|file-name| predstavlja putanju fajla za koji smo pročitali segment $[start-(start+length-1)]$
+		\item \verb|file-sector-data| predstavlja podatke iz segmenta $[start-(start+length-1)]$
+	\end{enumerate}
+	\item Uspešno izvršavanje - ishod 2\\
+	\begin{verbatim}
+	#OK get <file-name>
+	><start> <length>
+	><file-sector-data>
+	><crc-value>
+	#END
+	$
+	\end{verbatim}
+	\begin{enumerate}
+		\item Ovaj ishod se razlikuje od ishoda 1 samo u poslednjem podatku \verb|<crc-value>| koji predstavlja CRC vrednost za segment $[start-(start+length-1)]$
+	\end{enumerate}
+
+\end{itemize}
+Primer:
+\begin{verbatim}
+[\folder1\folder2]: get new_file 0 2 crc
+#OK get \folder1\folder2\new_file
+>65 66
+>13123
+#END
+$
+\end{verbatim}
+
+\subsection{Kodovi ostalih grešaka}
+
+\begin{table}[h]
+	\centering
+	\begin{tabular}{|l|l|}
+		\hline
+		COMMAND\_ERR\_GENERALERROR    & 10 \\ \hline
+		COMMAND\_ERR\_MISSINGARGUMENT & 11 \\ \hline
+		COMMAND\_ERR\_EXTRAARGUMENT   & 12 \\ \hline
+		COMMAND\_ERR\_INVALIDVALUE    & 13 \\ \hline
+		COMMAND\_ERR\_VALUEOUTOFRANGE & 14 \\ \hline
+		COMMAND\_ERR\_UNKNOWNCOMMAND  & 15 \\ \hline
+	\end{tabular}
+	\caption{Ostale greške}
+	\label{tab:my-table}
+\end{table}
+
+Značenje ovih kodova možemo pogledati u podsekciji \ref{errorsDesc}.
+
+\section{Opis serverskog Arduino koda}
+
+
+\subsection{Opis glavnog Arduino fajla: SerijskiKomandniProcesorSDCARD.ino}
+\label{Arduinoglavnikod}
+Potrebno je da uvezeno instaliranu biblioteku \textit{SdFat} (pogledati sekciju ref{l1}).
+
+Takođe uvozimo i sledeće fajlove:
+\begin{itemize}
+	\item cmdProc.h
+	\item buf.h
+	\item sdCardManipulator.h
+\end{itemize}
+U nastavku se nalaze odgovarajuće podsekcije u kojima opisujemo način upotrebe ovih fajlova.
+
+Koristimo tri interne promenljive: 
+\begin{itemize}
+	\item Objekat klase $CmdProc$. Klasu deklarišemo u fajlu sa nazivom "cmdProc.h". U objektu klase $CmdProc$ čuvamo podržane komande
+	\item Objekat klase $Buf$ koristimo za čuvanje pročitanih podataka sa serijskog porta
+	\item Promenljivu $chipSelect$ u kojoj čuvamo celobrojnu vrednost pina preko kojeg vršimo vremensku sinhronizaciju sa modulom za čitanje SD kartica.
+\end{itemize}
+
+Takođe koristimo i globalne promenljive koje smo uvezli iz fajla "sdCardManipulator.h":
+	\begin{itemize}
+		\item Objekat sa nazivom $sd$ klase $SdFat32$. Objekat klase $SdFat32$ predstavlja "kernel" za upravljanje modulom za čitanje SD kartica
+		\item Objekat sa nazivom $cwdFile$ klase $File32$. Objekat klase $File32$ predstavlja fajl koji je trenutno otvoren odnosno sa kojim trenutno radimo i koji se nalazi na SD kartici.
+	\end{itemize}
+
+Dopunjujemo metode:
+\begin{enumerate}
+		\item  $setup()$. 
+		Postavljamo brzinu protoka serijskog  čitanja i pisanja na 9600 baud. Nakon toga inicijalizujemo tunel za manipulisanje podacima između Arduino mikrokontrolera koji izvršava Arduino serverski kod i modula za čitanje SD kartica. U slučaju neuspešne inicijalizacije prijavljujemo grešku. Takođe ukoliko nismo uspeli da otvorimo \textit{root} korišćenjem metode $cwdFile.open("/")$ nad objektom klase $File32$  prijavljujemo grešku.
+		Nakon završetka rada zatvaramo fajl korišćenjem metode $cwdFile.close()$.
+		
+		Ostalo je još da inicijalizujemo i ponudimo programeru podržane komande. Koristimo objekat klase $CmdProc$ u kome čuvamo podržane komande. Na početku izvršavamo metodu $Init(int)$ kojoj prosleđujemo za argument broj podržanih komandi. Nakon toga dodajemo komande korišćenjem metode \\$Add(string, (*cmdCallback), int, int )$ gde
+		\begin{itemize}
+			\item za prvi argument navodimo ime komande
+			\item za drugi argument pokazivač na funkciju koja treba da se izvrši
+			\item broj obaveznih argumenta
+			\item broj ukupnih argumenata
+		\end{itemize} 
+	
+		\item $loop()$ u kojoj navodimo logiku za čitanje i interpretiranje pročitanog sa serijskog porta. Kada imamo dostupne podatke na serijskom portu čitamo ih i smeštamo u prethodno definisanu promenljivu $sbuf$. Ukoliko smo naišli na podatak koji ima celobrojnu vrednost $10$ (novi red) označavamo da je naš bafer (promenljiva $sbuf$) spreman za obrađivanje i prosledimo ga na obrađivanje. Obrađivanje vršimo korišćenjem statične metode $Parse(Buf)$ klase $Commands$. U slučaju neuspešnog obrađivanja bafera vraćamo celobrojnu vrednost različitu od $0$.
+		U tom slučaju vraćamo grešku pošiljaocu preko serijskog tunela u sklopu rezultata. Sadržaj greške modeliramo korišćenjem statične metode\\ $printErrorV2(char*, int)$ klase  $ReturnValues$.
+		
+		U oba slučaja bilo da se javila greška prilokom obrađivanja ili ne, čistimo bafer korišćenjem metode $Clear()$ nad promenljivom $sbuf$.
+		
+		
+		Ukoliko se nije javio podatak koji ima celobrojnu vrednost $10$ ali je različit od $13$ (povratak na početak reda)  pokušavamo da dodamo taj podatak u bafer. U slučaju neuspešnog dodavanja podatka u bafer javlja se prekoračenje bafera i vraćamo vrednost $false$. 
+
+\end{enumerate}
+
+\subsection{buf.h}
+
+	U ovom fajlu navodimo strukturu sa nazivom $Buf$ u kojoj definišemo metode i promenljive koje koristimo za čuvanje pročitanih podataka sa tunela.
+
+\subsection{cmdProc.h}
+
+	U ovom fajlu deklarišemo klase koje koristimo za pravljenje objekata u kojima čuvamo i koristimo podržane komande.
+	
+	U klasi $Cmd$ definišemo okruženje za izvršavanje komandi. U objektu klase $Cmd$ čuvamo naziv komande, memorijsku lokaciju funkcije koju je potrebno da izvršimo, broj obaveznih parametara i ukupan broj parametara.
+	
+	U objektu klase $CmdProc$ čuvamo sve podržane komande. Komande dodajemo korišćenjem metode $Add(char, (*cmdCallback), int, int)$.
+	Objekat klase $CmdProc$ sadrži metode $GetNextToken()$ , $Parse(char*)$ i $Exec()$  koje koristimo za određivanje konteksta u kojem izvršavamo funkciju komande odnosno određujemo argumente koje je potrebno da prosledimo funkciji komande. Ukoliko se broj argumenta poklapa sa traženim brojem argumenata izvršavamo funkciju komande.
+		
+	
+	Takođe deklarišemo pomoćne funkcije za parsiranje i ispitivanje raznih podataka koje definišemo u fajlu $cmdProc.cpp$:
+	\begin{enumerate}
+		\item $tryParseInt(char*, int\&)$ koristimo za konvertovanje prvog prosleđenog argumenta koji predstavlja reč u celobrojnu ili heksadecimalnu vrednost. Rezultat smeštamo na memorijsku lokaciju na kojoj se nalazi drugi argument.
+		\item $tryParseDec(char*, int\&, bool)$ koristimo za konvertovanje  prvog prosleđenog argumenta koji predstavlja reč u decimalnu vrednost. Rezultat smeštamo na memorijsku lokaciju na kojoj se nalazi drugi argument. Kao treći opcionalni argument imamo indikator da li prvi argument na prvom mestu sadrži karakter $'-'$.
+		\item $tryParseHex(char*, int\&, bool)$ koristimo za konvertovanje  prvog prosleđenog argumenta koji predstavlja reč u heksadecimalnu vrednost. Rezultat smeštamo na memorijsku lokaciju na kojoj se nalazi drugi argument.
+		\item $isHexDigit(char)$ koristimo za proveru da li prosleđeni karakter predstavlja heksadecimalni simbol.
+		
+		\item $tryParseTime(char*, int\&, int\&, int\&)$\\ koristimo za konvertovanje  prvog prosleđenog argumenta koji predstavlja reč u dve vrednosti. Prva vrednost predstavlja broj sati i druga vrednost predstavlja broj minuta. Vrednosti smeštamo redom na memorijske lokacije prosleđene u drugom i trećem argumentu.
+		
+		\item $tryParseDate(char*, int\&, int\&, int\&)$\\ koristimo za konvertovanje  prvog prosleđenog argumenta koji predstavlja reč u tri vrednosti. Prva vrednost predstavlja broj dana, druga vrednost predstavlja broj meseca i treća vrednost predstavlja broj godine. Vrednosti smeštamo redom na memorijske lokacije prosleđene u drugom, trećem i četvrtom argumentu.
+		
+		
+		\item $isValidDate(int, int ,int)$ koristimo za proveru da li prvi argument predstavlja dan, da li drugi predstavlja mesec i da li treći predstavlja godinu.
+		
+	\end{enumerate}
+
+	\subsection{cwdPath.h}
+	
+	U objektu klase $SdFat32$ biblioteke $SdFat$ ne postoji praćenje apsolutne putanje trenutnog radnog direktorijuma. 
+	Definisali smo novu klasu $CwdPath$. Objekat klase $CwdPath$ koristimo za praćenje apsolutne putanje trenutnog radnog direktorujima.
+	
+	\subsection{returnValues.h}
+	
+	U ovom fajlu definišemo metode u kojima modeliramo povratne vrednosti. 
+	Model rezultata izvršavanja primljene komande prati šablone povratnih vrednosti u opštem slučaju koje smo definisali u podsekciji \ref{povratnevrednosti} -  \textit{Povratne vrednosti u opštem slučaju}.
+	
+	\subsection{sdCardManipulator.h}
+	
+	U ovom fajlu definišemo funkcije komandi.
+	Najpre uvozimo potrebne fajlove:
+	
+	\begin{enumerate}
+		\item <arduino.h> i <avr/pgmspace.h> uvozimo za čitanje podataka iz programske memorije
+		\item <string.h> za manipulaciju stringovima
+		\item <SdFat.h> za manipulaciju podataka preko modul čitača za SD kartice
+ 		\item <util/crc16.h> za računanje CRC16 checksum-e 
+		\item "cwdPath.h" za praćenje apsolutne putanje trenutno radnog direktorijuma
+		\item "returnValues.h" u ovom fajlu se nalaze modeli povratnih vrednosti
+	\end{enumerate}
+
+	U programsku memoriju smeštamo
+	\begin{itemize}
+		\item sadržaj koji koristi $HELP$ komanda  
+		\item nazive podržanih komandi
+	\end{itemize}
+
+	U nastavku su opisane funkcije podržanih komandi. Sve funkcije imaju parametar koji predstavlja pokazivač na objekat klase $CmdProc$. U ovom objektu nalazi se kontekst u kojem se funkcija izvršava. 
+	
+	Na početku svake funkcije kopiramo naziv komande iz programske memorije u izvršni deo koda korišćenjem metode $strcpy\_P$. 
+	Nakon izvršavanja komande zatvaramo $cwdFile$ fajl nad kojim smo pokušali da izvšrimo komandu i štampamo zaglavlje i simbol $\$$ korišćenjem statične metode $printEndAndReady$ klase $ReturnValues$. 
+	
+	\subsubsection{cmdDir}
+	
+	Definisali smo dve promenljive sa nazivima $i\_file$ i $cwdFile$ klase $File32$.
+	Korišćenjem metode $open(char*)$ objekta $cwdFile$ otvaramo trenutni radni direktorijum. U slučaju greške prijavljujemo i vraćamo grešku.
+	
+	Metodom $rewind()$ premotovamo $cwdFile$ na početak i $while$ petljom iteriramo kroz trenutni radni direktorijum. Iterativno postavljamo $i\_file$ objekat da predstavlja fajl koji sledeći čitamo. Postavljamo ga korišćenjem metode $openNext$ kojoj prosleđujemo direktorijum koji čitamo i tip privilegije čitanja.
+	
+	Prilikom svake iteracije:
+	\begin{enumerate}
+		\item ispisujemo simbol $>$ korišćenjem statične metode $printResult$ klase $ReturnValues$
+		\item ispisujemo veličinu fajla
+		\item ispisujemo ime fajla i u slučaju direktorijuma dodajemo na kraju simbol "/"
+		\item na kraju svake iteracije zatvaramo $i\_file$.
+	\end{enumerate}
+
+	\subsubsection{cmdHelp}
+	
+	Koristimo klasu $\_\_FlashStringHelper$ pomoću koje čitamo reč iz programske memorije. Ovo je alternativni način i ovo možemo da uradimo i korišćenjem metode $strcpy\_P$.
+	
+	Iteriramo kroz niz sa nazivom $helpTable$ koji je smešten u programsku memoriju i u svakoj iteraciji čitamo element niza iz programske memorije i štampamo ga.
+	
+	\subsubsection{cmdPut}
+	
+	Obrađujemo prosleđene argumente. Proveravmo da li fajl sa nazivom prvog prosleđenog argumenta postoji. Ako postoji pokušavamo da ga otvorimo i u suprotnom pokušavamo da ga napravimo. Prilikom neuspešnog izvršavanja vraćamo odgovarajuću grešku.
+	
+	Drugi  i ostali argumenti predstavljaju podatke koje želimo da upišemo u fajl. Svaki argument obrađujemo i proveravamo da li predstavlja celobrojnu vrednost. U slučaju celobrojne vrednosti upisujemo argument u fajl. 
+	
+	\subsubsection{cmdDel}
+	
+	Ispitujemo da li fajl postoji i ukoliko postoji pokušavamo da ga obrišemo. Ukoliko nam je prosleđen naziv foldera koji trebamo da obrišemo koristimo metodu $rmRfStar$ objekta klase $File32$ za rekurzivno brisanje ne nužno praznog foldera.
+	
+	\subsubsection{cmdMd}
+	
+	Ispitujemo da li postoji folder sa istim nazivom korišćenjem metode $exists$ objekta klase $SdFat32$ i ukoliko postoji vraćamo odogovarajuću grešku. U suprotnom pokušavamo da napravimo folder korišćenjem metode $mkdir$ nad objektom klase $SdFat32$.
+	
+	
+	\subsubsection{cmdCrc}
+	
+	Obrađujemo argumente. Prvi argument predstavlja naziv fajla i ostali argumenti su opcionalni. Prilikom uspešnog izvršavanja računamo CRC16 vrednost za  segment fajla i vraćamo odgovarajuću poruku.
+	
+	\subsubsection{cmdGet}
+	
+	Obrađujemo argumente i prilikom uspešnog validiranja argumenata čitamo iz fajla  odgovarajući broj karaktera. Za pročitani karakter uzimamo njegovu celobrojnu vrednost i šaljemo je preko serijskog porta. Na kraju ukoliko je prosleđen i opcionalni argument $["crc"]$ prosleđujemo i CRC16 vrednost izračunatu za pročitani blok.
+	
+	\subsubsection{cmdCd}
+	
+	Obrađujemo argumente. Ukoliko prvi argument predstavlja:
+	\begin{enumerate}
+		\item "/" ; vraćamo se na \textit{root} korišćenjem metode $chdir$ objekta klase $SdFat32$. Takođe i objekat $wp$ klase $CwdPath$ resetujemo. 
+		\item ".." ; izbacujemo iz lanca celokupne radne putanje zadnji folder. Apsolutnu putanju trenutnog radnog direktorijuma čuvamo u objektu sa nazivom $wp$ klase $CwdPath$. Nakon toga korišćenjem metode $chdir$ nad objektom klase $SdFat32$ sa argumentom $wp.get()$ menjamo trenutni radni direktorijum.
+		\item naziv direktorijuma ; pokušavamo da pređemo na zadati folder. U slučaju greške vraćamo odgovarajuću poruku.
+		\item prazan agrument odnosno ukoliko prvi argument ne postoji vraćamo naziv trenutnog radnog direktorijuma.
+	\end{enumerate} 
+
+	
+
+
+	\subsubsection{errorCodes.h}
+	
+	U ovom fajlu navodimo kodove grešaka.
+	
+	
+\end{document}
+
